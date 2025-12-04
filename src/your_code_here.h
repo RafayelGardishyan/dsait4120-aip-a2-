@@ -8,13 +8,13 @@
 
 #include "helpers.h"
 
-
 /*
  * Utility functions.
  */
 
 template <typename T>
-int getIndex(const Image<T>& image, int px, int py) {
+int getIndex(const Image<T>& image, int px, int py)
+{
     int x = std::max(0, std::min(image.width - 1, px));
     int y = std::max(0, std::min(image.height - 1, py));
 
@@ -30,7 +30,7 @@ int getIndex(const Image<T>& image, int px, int py) {
 /// <returns>interpolated pixel value (float or glm::vec3)</returns>
 template <typename T>
 inline T sampleBilinear(const Image<T>& image, const glm::vec2& pos_px)
-{    
+{
     //
     // Write a code that bilinearly interpolates values from a generic image (can contain either float or glm::vec3).
     //
@@ -38,18 +38,18 @@ inline T sampleBilinear(const Image<T>& image, const glm::vec2& pos_px)
     //   [0, 0] = The left top corner of the left top (=first) pixel.
     //   [width, height] = The right bottom corner of the right bottom (=last) pixel.
     //   [0, height] = The left bottom corner of the left bottom pixel.
-    // 
-    // 
+    //
+    //
     // Note: The method is templated by parameter "T". This will be either float or glm::vec3 depending on whether the method
     // is called with ImageFloat or ImageRGB. Use either "T" or "auto" to define your variables and use glm::functions to handle both types.
     // Example:
     //    auto value = image.data[0] * 3; // both float and glm:vec3 support baisc operators
-    //    T rounded_value = glm::round(image.data[0]); // glm::round will handle both glm::vec3 and float. 
+    //    T rounded_value = glm::round(image.data[0]); // glm::round will handle both glm::vec3 and float.
     // Use glm API for further reference: https://glm.g-truc.net/0.9.9/api/a00241.html
-    // 
+    //
 
     glm::vec2 cpx = pos_px + glm::vec2(-0.5);
-    
+
     int x1 = std::floor(cpx.x);
     int x2 = x1 + 1;
     int y1 = std::floor(cpx.y);
@@ -63,7 +63,6 @@ inline T sampleBilinear(const Image<T>& image, const glm::vec2& pos_px)
 
     return (1 - dy) * ipx1 + dy * ipx2;
 }
-
 
 /*
   Core functions.
@@ -86,7 +85,7 @@ ImageFloat jointBilateralFilter(const ImageFloat& disparity, const ImageRGB& gui
     // We assume both images have matching dimensions.
     assert(disparity.width == guide.width && disparity.height == guide.height);
 
-    // Rule of thumb for gaussian's std dev. 
+    // Rule of thumb for gaussian's std dev.
     const float sigma = (size - 1) / 2 / 3.2f;
 
     // Empty output image.
@@ -99,17 +98,17 @@ ImageFloat jointBilateralFilter(const ImageFloat& disparity, const ImageRGB& gui
     // Implement a joint/cross bilateral filter of the disparity image guided by the guide RGB image.
     // Ignore all contributing pixels where disparity == INVALID_VALUE.
     //
-   
-    // 
+
+    //
     // Notes:
-    //   * If a pixel has no neighbor (all were skipped), assign INVALID_VALUE to the output.  
+    //   * If a pixel has no neighbor (all were skipped), assign INVALID_VALUE to the output.
     //   * Parallelize the code using OpenMP directives.
 
-    //auto example = gauss(0.5f, 1.2f); // This is just an example of computing Normal pdf for x=0.5 and std.dev=1.2.
+    // auto example = gauss(0.5f, 1.2f); // This is just an example of computing Normal pdf for x=0.5 and std.dev=1.2.
 
     int half_size = (size - 1) / 2;
 
-    #pragma omp parallel for collapse(2) schedule(dynamic)
+#pragma omp parallel for collapse(2) schedule(dynamic)
     for (int x = 0; x < width; x++) {
         for (int y = 0; y < height; y++) {
 
@@ -136,7 +135,7 @@ ImageFloat jointBilateralFilter(const ImageFloat& disparity, const ImageRGB& gui
 
                     res += vx * w_i;
                     w += w_i;
-                }    
+                }
             }
 
             if (w > 0.0f)
@@ -144,7 +143,7 @@ ImageFloat jointBilateralFilter(const ImageFloat& disparity, const ImageRGB& gui
             else
                 result.data[getIndex(result, x, y)] = INVALID_VALUE;
         }
-    }    
+    }
 
     // Return filtered disparity.
     return result;
@@ -162,25 +161,29 @@ void normalizeValidValues(ImageFloat& scalar_image)
     // Find minimum and maximum among the VALID image values.
     // Linearly rescale the VALID image values to the [0,1] range (in-place).
     // The INVALID values remain INVALID (they are ignored).
-    // 
+    //
     // Note #1: Pixel is INVALID as long as value == INVALID_VALUE.
     // Note #2: This modified the input image in-place => no "return".
     //
-    
+
     float min = INFINITY;
     float max = -INFINITY;
 
-    #pragma omp parallel for reduction(min : min) reduction(max:max)
+#pragma omp parallel for reduction(min : min) reduction(max : max)
     for (int i = 0; i < scalar_image.data.size(); i++) {
         float val = scalar_image.data[i];
+        if (val == INVALID_VALUE)
+            continue;
         min = std::min(min, val);
         max = std::max(max, val);
     }
 
     float maxmin = max - min;
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for (int i = 0; i < scalar_image.data.size(); i++) {
+        if (scalar_image.data[i] == INVALID_VALUE)
+            continue;
         scalar_image.data[i] = (scalar_image.data[i] - min) / maxmin;
     }
 }
@@ -199,11 +202,11 @@ ImageFloat disparityToNormalizedDepth(const ImageFloat& disparity)
     // If disparity of a pixel is invalid, set its depth also invalid (INVALID_VALUE).
     // We guarantee that all valid disparities > 0.
     //
-    
-    #pragma omp parallel for
+
+#pragma omp parallel for
     for (int i = 0; i < disparity.data.size(); i++) {
         float val = disparity.data[i];
-        depth.data[i] = val == INVALID_VALUE ? INVALID_VALUE : 1.0 / val;
+        depth.data[i] = val == INVALID_VALUE ? INVALID_VALUE : 1.0f / val;
     }
 
     // Rescales valid depth values to [0,1] range.
@@ -214,7 +217,7 @@ ImageFloat disparityToNormalizedDepth(const ImageFloat& disparity)
 
 /// <summary>
 /// Convert linear normalized depth to target pixel disparity.
-/// Invalid pixels 
+/// Invalid pixels
 /// </summary>
 /// <param name="depth">Normalized depth image (values in [0,1])</param>
 /// <param name="iod_mm">Inter-ocular distance in mm.</param>
@@ -230,16 +233,23 @@ ImageFloat normalizedDepthToDisparity(
 {
     auto px_disparity = ImageFloat(depth.width, depth.height);
 
- 
-    // 
+    //
     // Note:
     //    * All distances are measured orthogonal on the screen and such that pixel size is assumed constant across the screen (ignores the eccentricity).
     //    * Invalid pixels (depth==INVALID_VALUE) are to be marked invalid on the output as well.
     //
-    
-    //
-    //    YOUR CODE GOES HERE
-    //
+
+#pragma omp parallel for
+    for (int i = 0; i < depth.data.size(); i++) {
+        if (depth.data[i] == INVALID_VALUE) {
+            px_disparity.data[i] = INVALID_VALUE;
+            continue;
+        }
+
+        auto depth_abs = near_plane_mm + (depth.data[i] * (far_plane_mm - near_plane_mm));
+
+        px_disparity.data[i] = (iod_mm / px_size_mm) * ((depth_abs - screen_distance_mm) / depth_abs);
+    }
 
     return px_disparity; // returns disparity measured in pixels
 }
@@ -249,7 +259,7 @@ ImageFloat normalizedDepthToDisparity(
 /// It produces vertex buffer which stores 2D positions of pixel corners,
 /// and index buffer which defines triangles by triplets of indices into
 /// the vertex buffer (the three vertices form a triangle).
-/// 
+///
 /// </summary>
 /// <param name="width">Image width.</param>
 /// <param name="height">Image height.</param>
@@ -291,22 +301,17 @@ Mesh warpGrid(Mesh& grid, const ImageFloat& disparity, const float scaling_facto
 
     const float EDGE_EPSILON = 1e-5f * disparity.width;
 
-    
     // Here is an example use of the bilinear interpolation (using the provided function argument).
     auto interpolated_value = sampleBilinear(disparity, glm::vec2(1.0f, 1.0f));
 
     // !!! Recommended test: sampleBilinear(disparity, glm::vec2(1.0f, 1.0f)); should return mean of the 4 pixels for any 2x2 image !!!
-    
+
     //
     //    YOUR CODE GOES HERE
     //
 
-
-
     return new_grid;
 }
-
-
 
 /// <summary>
 /// Forward-warps an image based on the given disparity and warp_factor.
@@ -321,7 +326,7 @@ ImageWithMask forwardWarpImage(const ImageRGB& src_image, const ImageFloat& src_
     // The dimensions of src image, src depth and disparity maps all match.
     assert(src_image.width == disparity.width && src_image.height == disparity.height);
     assert(src_image.width == disparity.width && src_depth.height == src_depth.height);
-    
+
     // Create a new image and depth map for the output.
     auto dst_image = ImageRGB(src_image.width, src_image.height);
     auto dst_mask = ImageFloat(src_depth.width, src_depth.height);
@@ -331,21 +336,36 @@ ImageWithMask forwardWarpImage(const ImageRGB& src_image, const ImageFloat& src_
     // Fill the destination depth map with a very large number.
     std::fill(dst_depth.data.begin(), dst_depth.data.end(), std::numeric_limits<float>::max());
 
-  
-    // 
+    //
     // Note: Parallelize the code using OpenMP directives.
     //
-    
-    //
-    //    YOUR CODE GOES HERE
-    //
 
+    int w = src_image.width;
+    int h = src_image.height;
+
+#pragma omp parallel for collapse(2) schedule(dynamic)
+    for (int x = 0; x < w; x++) {
+        for (int y = 0; y < h; y++) {
+            auto src_pixel = src_image.data[getIndex(src_image, x, y)];
+            auto src_pixel_depth = src_depth.data[getIndex(src_depth, x, y)];
+            auto pix_disparity = disparity.data[getIndex(disparity, x, y)];
+
+            int nx = x + std::floor((pix_disparity * warp_factor) + 0.5);
+
+#pragma omp critical
+            {
+                if (!(pix_disparity == INVALID_VALUE || src_pixel_depth == INVALID_VALUE || nx < 0 || nx >= w || dst_depth.data[getIndex(dst_depth, nx, y)] <= src_pixel_depth)) {
+                    dst_image.data[getIndex(dst_image, nx, y)] = src_pixel;
+                    dst_depth.data[getIndex(dst_depth, nx, y)] = src_pixel_depth;
+                    dst_mask.data[getIndex(dst_mask, nx, y)] = 1.0f;
+                }
+            }
+        }
+    }
 
     // Return the warped image.
     return ImageWithMask(dst_image, dst_mask);
-
 }
-
 
 /// <summary>
 /// Applies Gaussian filter on the given image to fill the holes
@@ -365,12 +385,41 @@ ImageRGB inpaintHoles(const ImageWithMask& img, const int size)
 
     // The output is initialized by copy of the input.
     auto result = ImageRGB(img.image);
-    
 
-    //
-    //    YOUR CODE GOES HERE
-    //
-    
+    int w = img.image.width;
+    int h = img.image.height;
+    int hs = (size - 1) / 2;
+
+#pragma omp parallel for collapse(2)
+    for (int x = 0; x < w; x++) {
+        for (int y = 0; y < w; y++) {
+
+            if (img.mask.data[getIndex(img.mask, x, y)] == 1)
+                continue;
+
+            auto res = glm::vec3(0.0);
+            float weight = 0.0;
+
+            for (int i = -hs; i <= hs; i++) {
+                for (int j = -hs; j <= hs; j++) {
+                    int nx = x + i;
+                    int ny = y + j;
+
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h)
+                        continue;
+
+                    if (img.mask.data[getIndex(img.mask, nx, ny)] == 0)
+                        continue;
+
+                    float w_i = gauss(nx, sigma, x) * gauss(ny, sigma, ny);
+                    res += img.image.data[getIndex(img.image, nx, ny)] * w_i;
+                    weight += w_i;
+                }
+            }
+
+            result.data[getIndex(img.image, x, y)] = res / weight;
+        }
+    }
 
     // Return inpainted image.
     return result;
@@ -401,7 +450,6 @@ ImageRGB backwardWarpImage(const ImageRGB& src_image, const ImageFloat& src_dept
     // Fill the destination depth map with a very large number.
     std::fill(dst_depth.data.begin(), dst_depth.data.end(), 1e20f);
 
-        
     // Example of testing point [0.1, 0.2] is inside a triangle.
     bool is_point_inside = isPointInsideTriangle(glm::vec2(0.1, 0.2), glm::vec2(0, 0), glm::vec2(1, 0), glm::vec2(0, 1));
 
@@ -428,7 +476,6 @@ ImageRGB createAnaglyph(const ImageRGB& image_left, const ImageRGB& image_right,
     // An empty image for the resulting anaglyph.
     auto anaglyph = ImageRGB(image_left.width, image_left.height);
 
-    
     // Example: RGB->HSV->RGB should be approx identity.
     auto rgb_orig = glm::vec3(0.2, 0.6, 0.4);
     auto rgb_should_be_same = hsvToRgb(rgbToHsv(rgb_orig)); // expect rgb == rgb_2 (up to numerical precision)
@@ -440,7 +487,6 @@ ImageRGB createAnaglyph(const ImageRGB& image_left, const ImageRGB& image_right,
     // Returns a single analgyph image.
     return anaglyph;
 }
-
 
 /// <summary>
 /// Rotates a grid counter-clockwise around the center by a given angle in degrees.
@@ -456,16 +502,12 @@ Mesh rotatedWarpGrid(Mesh& grid, const glm::vec2& center, const float& angle)
 
     const float DEGREE2RADIANS = 0.0174532925f;
 
-    
     //
     //    YOUR CODE GOES HERE
     //
 
-
     return new_grid;
 }
-
-
 
 /// <summary>
 /// Rotate an image using backward warping based on the provided meshes.
