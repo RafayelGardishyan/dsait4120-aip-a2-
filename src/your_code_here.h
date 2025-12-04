@@ -90,8 +90,10 @@ ImageFloat jointBilateralFilter(const ImageFloat& disparity, const ImageRGB& gui
     const float sigma = (size - 1) / 2 / 3.2f;
 
     // Empty output image.
-    auto result = ImageFloat(disparity.width, disparity.height);
+    auto result = ImageFloat(disparity);
 
+    int width = disparity.width;
+    int height = disparity.height;
 
     //
     // Implement a joint/cross bilateral filter of the disparity image guided by the guide RGB image.
@@ -103,12 +105,51 @@ ImageFloat jointBilateralFilter(const ImageFloat& disparity, const ImageRGB& gui
     //   * If a pixel has no neighbor (all were skipped), assign INVALID_VALUE to the output.  
     //   * Parallelize the code using OpenMP directives.
 
-    //
-    //    YOUR CODE GOES HERE
-    //
+    //auto example = gauss(0.5f, 1.2f); // This is just an example of computing Normal pdf for x=0.5 and std.dev=1.2.
 
-    auto example = gauss(0.5f, 1.2f); // This is just an example of computing Normal pdf for x=0.5 and std.dev=1.2.
+    int half_size = (size - 1) / 2;
 
+    #pragma omp parallel for collapse(2) schedule(dynamic)
+    for (int x = 0; x < width; x++) {
+        for (int y = 0; y < height; y++) {
+
+
+            if (disparity.data[getIndex(disparity, x, y)] != INVALID_VALUE)
+                continue;
+
+            auto p = guide.data[getIndex(disparity, x, y)];
+
+            float res = 0.0;
+            float w = 0.0;
+
+            for (int i = -half_size; i <= half_size; i++) {
+                for (int j = -half_size; j <= half_size; j++) {
+                    int nx = x + i;
+                    int ny = y + j;
+
+                    auto vx = disparity.data[getIndex(disparity, nx, ny)];
+
+                    if (vx == INVALID_VALUE)
+                        continue;
+
+                    if (nx < 0 || nx >= disparity.width || ny < 0 || ny >= disparity.height)
+                        continue;
+
+                    auto pn = guide.data[getIndex(guide, nx, ny)];
+
+                    float norm = glm::length(pn - p);
+
+                    float w_i = (gauss(nx - x, sigma) * gauss(ny - y, sigma)) * gauss(norm, guide_sigma);
+
+                    res += vx * w_i;
+                    w += w_i;
+                }    
+            }
+
+            if (w > 0.0f)
+                result.data[getIndex(disparity, x, y)] = res / w;
+        }
+    }    
 
     // Return filtered disparity.
     return result;
@@ -131,9 +172,22 @@ void normalizeValidValues(ImageFloat& scalar_image)
     // Note #2: This modified the input image in-place => no "return".
     //
     
-    //
-    //    YOUR CODE GOES HERE
-    //
+    float min = INFINITY;
+    float max = -INFINITY;
+
+    #pragma omp parallel for reduction(min : min) reduction(max:max)
+    for (int i = 0; i < scalar_image.data.size(); i++) {
+        float val = scalar_image.data[i];
+        min = std::min(min, val);
+        max = std::max(max, val);
+    }
+
+    float maxmin = max - min;
+
+    #pragma omp parallel for
+    for (int i = 0; i < scalar_image.data.size(); i++) {
+        scalar_image.data[i] = (scalar_image.data[i] - min) / maxmin;
+    }
 }
 
 /// <summary>
@@ -150,10 +204,12 @@ ImageFloat disparityToNormalizedDepth(const ImageFloat& disparity)
     // If disparity of a pixel is invalid, set its depth also invalid (INVALID_VALUE).
     // We guarantee that all valid disparities > 0.
     //
-        
-    //
-    //    YOUR CODE GOES HERE
-    //
+    
+    #pragma omp parallel for
+    for (int i = 0; i < disparity.data.size(); i++) {
+        float val = disparity.data[i];
+        depth.data[i] = val == INVALID_VALUE ? INVALID_VALUE : 1.0 / val;
+    }
 
     // Rescales valid depth values to [0,1] range.
     normalizeValidValues(depth);

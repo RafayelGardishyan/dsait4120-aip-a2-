@@ -37,9 +37,6 @@ install_manifest.txt
 *.pdb
 *.ilk
 
-# Project outputs
-outputs/
-
 # IDE
 .vscode/
 .idea/
