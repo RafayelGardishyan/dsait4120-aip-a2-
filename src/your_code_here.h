@@ -113,11 +113,7 @@ ImageFloat jointBilateralFilter(const ImageFloat& disparity, const ImageRGB& gui
     for (int x = 0; x < width; x++) {
         for (int y = 0; y < height; y++) {
 
-
-            if (disparity.data[getIndex(disparity, x, y)] != INVALID_VALUE)
-                continue;
-
-            auto p = guide.data[getIndex(disparity, x, y)];
+            auto p = guide.data[getIndex(guide, x, y)];
 
             float res = 0.0;
             float w = 0.0;
@@ -127,18 +123,15 @@ ImageFloat jointBilateralFilter(const ImageFloat& disparity, const ImageRGB& gui
                     int nx = x + i;
                     int ny = y + j;
 
-                    auto vx = disparity.data[getIndex(disparity, nx, ny)];
-
-                    if (vx == INVALID_VALUE)
-                        continue;
-
                     if (nx < 0 || nx >= disparity.width || ny < 0 || ny >= disparity.height)
                         continue;
 
+                    auto vx = disparity.data[getIndex(disparity, nx, ny)];
+                    if (vx == INVALID_VALUE)
+                        continue;
+
                     auto pn = guide.data[getIndex(guide, nx, ny)];
-
                     float norm = glm::length(pn - p);
-
                     float w_i = (gauss(nx - x, sigma) * gauss(ny - y, sigma)) * gauss(norm, guide_sigma);
 
                     res += vx * w_i;
@@ -147,7 +140,9 @@ ImageFloat jointBilateralFilter(const ImageFloat& disparity, const ImageRGB& gui
             }
 
             if (w > 0.0f)
-                result.data[getIndex(disparity, x, y)] = res / w;
+                result.data[getIndex(result, x, y)] = res / w;
+            else
+                result.data[getIndex(result, x, y)] = INVALID_VALUE;
         }
     }    
 
