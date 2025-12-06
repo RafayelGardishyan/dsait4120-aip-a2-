@@ -271,9 +271,12 @@ Mesh createWarpingGrid(const int width, const int height)
     auto num_vertices = (width + 1) * (height + 1);
     auto vertices = std::vector<glm::vec2>(num_vertices);
 
-    //
-    //    YOUR CODE GOES HERE
-    //
+    #pragma omp parallel for
+    for (int i = 0; i < num_vertices; i++) {
+        int x = i % (width + 1);
+        int y = i / (width + 1);
+        vertices[i] = glm::vec2(x, y);
+    }
 
     // Build index buffer.
     auto num_pixels = width * height;
