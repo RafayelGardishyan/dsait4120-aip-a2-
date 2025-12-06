@@ -480,9 +480,24 @@ ImageRGB createAnaglyph(const ImageRGB& image_left, const ImageRGB& image_right,
     auto rgb_orig = glm::vec3(0.2, 0.6, 0.4);
     auto rgb_should_be_same = hsvToRgb(rgbToHsv(rgb_orig)); // expect rgb == rgb_2 (up to numerical precision)
 
-    //
-    //    YOUR CODE GOES HERE
-    //
+    for (int i = 0; i < anaglyph.data.size(); i++) {
+        auto hsv_left = rgbToHsv(image_left.data[i]);
+        auto hsv_right = rgbToHsv(image_right.data[i]);
+
+        hsv_left.y *= saturation;
+        hsv_right.y *= saturation;
+
+        auto rgb_left = hsvToRgb(hsv_left);
+        auto rgb_right = hsvToRgb(hsv_right);
+
+        glm::vec3 final{
+            rgb_left.r,
+            rgb_right.g,
+            rgb_right.b
+        };
+
+        anaglyph.data[i] = final;
+    }
 
     // Returns a single analgyph image.
     return anaglyph;
